@@ -7,6 +7,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   test-and-build-apk:
     runs-on: ubuntu-latest
@@ -51,3 +54,17 @@ jobs:
           name: warung-simulator-2d-debug-apk
           path: warung-simulator-2d-debug.apk
           retention-days: 30
+
+      - name: Publish APK to GitHub Release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v1.1.0"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" warung-simulator-2d-debug.apk --clobber
+          else
+            gh release create "$TAG" warung-simulator-2d-debug.apk \
+              --title "Warung Simulator 2D v1.1.0 (MVP)" \
+              --notes "Unduh langsung file **warung-simulator-2d-debug.apk** di bawah ini untuk memasang Warung Simulator 2D di perangkat Android (100% offline, orientasi landscape, layar penuh)."
+          fi
