@@ -1,0 +1,12 @@
+{
+  "appId": "id.warung.simulator",
+  "appName": "Warung Simulator 2D",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "backgroundColor": "#3b2314",
+    "allowMixedContent": false
+  }
+}
