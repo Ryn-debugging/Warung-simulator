@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" shape-rendering="crispEdges">
+  <!-- Langit hangat -->
+  <rect width="16" height="16" fill="#2b1d14"/>
+  <rect x="1" y="1" width="14" height="14" fill="#6ec6f0"/>
+  <!-- Atap genteng -->
+  <rect x="2" y="2" width="12" height="1" fill="#8f3f22"/>
+  <rect x="1" y="3" width="14" height="2" fill="#b5532f"/>
+  <!-- Terpal hijau-putih khas warung -->
+  <rect x="1" y="5" width="2" height="2" fill="#2e8b57"/>
+  <rect x="3" y="5" width="2" height="2" fill="#fdf4df"/>
+  <rect x="5" y="5" width="2" height="2" fill="#2e8b57"/>
+  <rect x="7" y="5" width="2" height="2" fill="#fdf4df"/>
+  <rect x="9" y="5" width="2" height="2" fill="#2e8b57"/>
+  <rect x="11" y="5" width="2" height="2" fill="#fdf4df"/>
+  <rect x="13" y="5" width="2" height="2" fill="#2e8b57"/>
+  <!-- Dinding & interior -->
+  <rect x="2" y="7" width="12" height="7" fill="#e8d6a0"/>
+  <!-- Rak kiri -->
+  <rect x="3" y="8" width="4" height="5" fill="#7a4f2a"/>
+  <rect x="3" y="8" width="2" height="1" fill="#f7d046"/>
+  <rect x="5" y="8" width="2" height="1" fill="#d9342b"/>
+  <rect x="3" y="10" width="2" height="1" fill="#4a90d9"/>
+  <rect x="5" y="10" width="2" height="1" fill="#f08a24"/>
+  <!-- Meja kasir & spanduk -->
+  <rect x="8" y="10" width="5" height="4" fill="#8b5a2b"/>
+  <rect x="9" y="11" width="3" height="2" fill="#f7d046"/>
+  <!-- Pemilik berpeci -->
+  <rect x="10" y="7" width="2" height="1" fill="#1a1a1a"/>
+  <rect x="10" y="8" width="2" height="1" fill="#e0a878"/>
+  <rect x="10" y="9" width="2" height="1" fill="#ffffff"/>
+  <!-- Jalan -->
+  <rect x="1" y="14" width="14" height="1" fill="#4b4f58"/>
+</svg>

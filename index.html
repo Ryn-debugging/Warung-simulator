@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#2b1d14" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="icon" type="image/svg+xml" href="src/assets/ui/icon.svg" />
+  <title>Warung Simulator 2D</title>
+  <link rel="stylesheet" href="src/css/style.css" />
+  <link rel="stylesheet" href="src/css/mobile.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Area dunia 2D + HUD -->
+    <div id="stage">
+      <canvas id="game-canvas" aria-label="Warung"></canvas>
+
+      <div id="hud" class="hidden">
+        <div class="hud-group">
+          <div class="chip money" id="hud-money">Rp0</div>
+          <div class="chip" id="hud-day">Hari 1</div>
+          <div class="chip" id="hud-clock">08:00</div>
+        </div>
+        <div class="hud-group">
+          <div class="chip rep" id="hud-rep" title="Reputasi">★★★☆☆</div>
+          <button class="hud-btn" id="btn-supplier" title="Supplier">📦</button>
+          <button class="hud-btn" id="btn-upgrade" title="Upgrade">🔨</button>
+          <button class="hud-btn" id="btn-pause" title="Jeda">⏸</button>
+        </div>
+      </div>
+
+      <div id="toasts"></div>
+    </div>
+
+    <!-- Panel bawah -->
+    <div id="panel" class="hidden">
+      <!-- Mode persiapan (sebelum buka) -->
+      <div id="panel-prep" class="panel-mode hidden">
+        <div class="box prep-info">
+          <div class="box-title" id="prep-title">Hari 1 — Persiapan</div>
+          <div class="event-card" id="prep-event"></div>
+          <div class="prep-target" id="prep-target"></div>
+        </div>
+        <div class="box prep-stock">
+          <div class="box-title">Stok Warung</div>
+          <div id="prep-stock-list" class="stock-list"></div>
+        </div>
+        <div class="box prep-actions">
+          <button class="btn" id="prep-supplier">📦 Supplier</button>
+          <button class="btn" id="prep-upgrade">🔨 Upgrade</button>
+          <button class="btn primary big" id="btn-open">🏪 Buka Warung</button>
+        </div>
+      </div>
+
+      <!-- Mode melayani -->
+      <div id="panel-serve" class="panel-mode hidden">
+        <div class="box order-box">
+          <div class="order-head">
+            <span id="cust-name">Belum ada pelanggan</span>
+            <span id="cust-type" class="tag"></span>
+          </div>
+          <div id="cust-dialog" class="dialog">Tunggu pelanggan datang ya...</div>
+          <div id="order-list" class="order-list"></div>
+        </div>
+
+        <div class="box items-box">
+          <div id="item-grid" class="item-grid"></div>
+          <div id="change-grid" class="change-grid hidden"></div>
+        </div>
+
+        <div class="box cart-box">
+          <div id="cart-view" class="cart-view">
+            <div class="box-title">Keranjang <span class="cart-total" id="cart-total">Rp0</span></div>
+            <div id="cart-list" class="cart-list"><span class="muted">Kosong</span></div>
+            <div class="btn-row">
+              <button class="btn small" id="btn-clear" title="Kosongkan keranjang">🗑</button>
+              <button class="btn small warn" id="btn-habis" title="Bilang barang habis">Habis</button>
+              <button class="btn primary" id="btn-submit">Selesai ✓</button>
+            </div>
+          </div>
+          <div id="pay-view" class="pay-view hidden">
+            <div class="pay-row"><span>Total</span><b id="pay-total">Rp0</b></div>
+            <div class="pay-row"><span>Uang</span><b id="pay-cash">Rp0</b></div>
+            <div class="pay-row hint" id="pay-hint-row"><span>Kembalian</span><b id="pay-need">Rp0</b></div>
+            <div class="pay-row given"><span>Diberi</span><b id="pay-given">Rp0</b></div>
+            <div class="btn-row">
+              <button class="btn small" id="btn-pay-reset">Ulang</button>
+              <button class="btn primary" id="btn-pay-give">Berikan</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Menu utama -->
+    <div id="menu" class="overlay menu">
+      <div class="menu-card">
+        <div class="logo">
+          <div class="logo-top">WARUNG</div>
+          <div class="logo-bottom">SIMULATOR 2D</div>
+          <div class="tagline">"Modal pas-pasan, pelanggan banyak maunya."</div>
+        </div>
+        <div class="menu-buttons">
+          <button class="btn primary big" id="menu-continue">▶ Lanjutkan</button>
+          <button class="btn big" id="menu-new">✚ Permainan Baru</button>
+          <div class="menu-row">
+            <button class="btn" id="menu-settings">⚙ Pengaturan</button>
+            <button class="btn" id="menu-credits">ℹ Kredit</button>
+          </div>
+          <div class="save-info" id="save-info"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal umum -->
+    <div id="modal" class="overlay hidden">
+      <div class="modal-card">
+        <div class="modal-title" id="modal-title">Judul</div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-actions" id="modal-actions"></div>
+      </div>
+    </div>
+
+    <div id="rotate-hint">
+      <div>📱↻</div>
+      <p>Putar perangkat ke posisi <b>landscape</b> untuk bermain.</p>
+    </div>
+  </div>
+
+  <script src="src/js/data.js"></script>
+  <script src="src/js/Sprites.js"></script>
+  <script src="src/js/AudioManager.js"></script>
+  <script src="src/js/InventoryManager.js"></script>
+  <script src="src/js/EconomyManager.js"></script>
+  <script src="src/js/TransactionManager.js"></script>
+  <script src="src/js/SaveManager.js"></script>
+  <script src="src/js/CustomerManager.js"></script>
+  <script src="src/js/Renderer.js"></script>
+  <script src="src/js/UIManager.js"></script>
+  <script src="src/js/GameManager.js"></script>
+  <script src="src/js/main.js"></script>
+</body>
+</html>
