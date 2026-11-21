@@ -61,15 +61,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v2.0.0"
+          cat > release-notes.md << 'NOTES'
+          ## Pembaruan Besar v2.0.0 — Buka Cabang & 12 Upgrade
+          - **Buka Cabang Warung (4 Lokasi):** Warung Berkah Pusat, Cabang Depan Sekolah (SDN 01 + Bendera Merah Putih), Cabang Kosan & Kampus (+Rp500 harga jual), dan Cabang Pinggir Pasar (+35% traffic & belanja borongan). Cabang lain beroperasi otomatis dan menyetor keuntungan tiap akhir hari!
+          - **12 Upgrade Warung:** 8 Upgrade Fasilitas per cabang (termasuk **Etalase Gorengan & Kopi Seduh** dan **Ekspansi Ruangan 5 antrean**) + 4 Upgrade Jaringan Global (**QRIS & Bayar Digital**, **Kipas Angin & Free Wi-Fi**, **Kontrak Gudang Grosir -15%**, **Pelatihan Karyawan Cabang +40%**).
+          - **Migrasi Otomatis:** Progres tersimpan dari v1.1.0 otomatis dimigrasikan tanpa kehilangan data.
+
+          Unduh langsung file **warung-simulator-2d-v2.0.0-debug.apk** di bawah ini untuk memasang di HP Android.
+          NOTES
+          sed -i 's/^          //' release-notes.md
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" warung-simulator-2d-v2.0.0-debug.apk --clobber
           else
             gh release create "$TAG" warung-simulator-2d-v2.0.0-debug.apk \
               --title "Warung Simulator 2D v2.0.0 — Buka Cabang & 12 Upgrade" \
-              --notes "## Pembaruan Besar v2.0.0
-- **Buka Cabang Warung (4 Lokasi):** Warung Berkah Pusat, Cabang Depan Sekolah (SDN 01 + Bendera Merah Putih), Cabang Kosan & Kampus (+Rp500 harga jual), dan Cabang Pinggir Pasar (+35% ramai & belanja borongan). Cabang lain beroperasi otomatis dan menyetor keuntungan tiap akhir hari!
-- **12 Upgrade Warung:** 8 Upgrade Fasilitas per cabang (termasuk **Etalase Gorengan & Kopi Seduh** dan **Ekspansi Ruangan 5 antrean**) + 4 Upgrade Jaringan Global (**QRIS & Bayar Digital**, **Kipas Angin & Free Wi-Fi**, **Kontrak Gudang Grosir -15%**, **Pelatihan Karyawan Cabang +40%**).
-- **Migrasi Otomatis:** Progres tersimpan dari v1.1.0 otomatis dimigrasikan tanpa kehilangan data.
-
-Unduh langsung file **warung-simulator-2d-v2.0.0-debug.apk** di bawah ini untuk memasang di HP Android."
+              --notes-file release-notes.md
           fi
