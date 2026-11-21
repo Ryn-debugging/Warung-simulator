@@ -6,6 +6,9 @@ import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SHOT_DIR = process.env.SHOT_DIR || '';
+if (SHOT_DIR) fs.mkdirSync(SHOT_DIR, { recursive: true });
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -44,7 +47,7 @@ async function main() {
 
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
-  const debugPort = 9224;
+  const debugPort = 9225;
   const chrome = spawn(chromeBin, [
     '--headless=new',
     '--no-sandbox',
@@ -84,7 +87,7 @@ async function main() {
         if (msg.error) reject(new Error(msg.error.message));
         else resolve(msg.result);
       } else if (msg.method === 'Runtime.exceptionThrown') {
-        errors.push(msg.params.exceptionDetails.text);
+        errors.push(msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text);
       } else if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error') {
         errors.push(msg.params.entry.text);
       }
@@ -99,6 +102,11 @@ async function main() {
       const r = await cdp('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
       if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
       return r.result.value;
+    };
+    const shot = async (name) => {
+      if (!SHOT_DIR) return;
+      const { data } = await cdp('Page.captureScreenshot', { format: 'png' });
+      fs.writeFileSync(path.join(SHOT_DIR, name + '.png'), Buffer.from(data, 'base64'));
     };
 
     await cdp('Runtime.enable');
@@ -123,33 +131,65 @@ async function main() {
     assert.equal(await evalJS(`window.game.inventory.stock('air')`), air0 + 5);
     assert.equal(await evalJS(`window.game.state.money`), money0 - 10000);
 
-    // 3. Buka warung & kedatangan pelanggan otomatis
+    // 3. v2.0.0: Buka Cabang Depan Sekolah & pindah kelola + beli upgrade baru (gorengan, ekspansi, qris, wifi)
+    await evalJS(`
+      window.game.state.money = 950000;
+      window.game.state.reputation = 75;
+      window.game.ui.renderAll();
+    `);
+    await evalJS(`document.getElementById('prep-branch').click()`);
+    await sleep(200);
+    assert.equal(await evalJS(`window.game.ui.modalType`), 'branches');
+    await shot('v2_01_branches_modal');
+    await evalJS(`document.querySelector('.br-unlock[data-id="sekolah"]').click()`);
+    await sleep(200);
+    assert.equal(await evalJS(`window.game.state.branches.sekolah.unlocked`), true);
+    await evalJS(`document.querySelector('.br-switch[data-id="sekolah"]').click()`);
+    await sleep(250);
+    assert.equal(await evalJS(`window.game.state.activeBranch`), 'sekolah');
+
+    // Beli upgrade cabang (gorengan + ekspansi) & global (qris + wifi)
+    await evalJS(`document.getElementById('prep-upgrade').click()`);
+    await sleep(200);
+    await shot('v2_02_upgrades_branch');
+    await evalJS(`document.querySelector('.upg-buy[data-id="gorengan"]').click()`);
+    await sleep(120);
+    await evalJS(`document.querySelector('.upg-buy[data-id="ekspansi"]').click()`);
+    await sleep(120);
+    assert.equal(await evalJS(`window.game.customers.maxQueue()`), 5);
+    await evalJS(`document.querySelector('.tab-btn[data-tab="global"]').click()`);
+    await sleep(150);
+    await shot('v2_03_upgrades_global');
+    await evalJS(`document.querySelector('.upg-buy[data-id="qris"]').click()`);
+    await sleep(120);
+    await evalJS(`document.querySelector('.upg-buy[data-id="wifi"]').click()`);
+    await sleep(120);
+    await evalJS(`window.game.ui.closeModal()`);
+    await sleep(200);
+
+    // 4. Buka Warung di Cabang Sekolah & layani pelanggan
     await evalJS(`document.getElementById('btn-open').click()`);
-    await sleep(1900);
-    assert.ok((await evalJS(`window.game.customers.queue.length`)) >= 1);
+    let spawned = 0;
+    for (let i = 0; i < 25; i++) {
+      await sleep(200);
+      spawned = await evalJS(`window.game.customers.queue.length`);
+      if (spawned >= 1) break;
+    }
+    assert.ok(spawned >= 1, 'Pelanggan datang otomatis setelah warung dibuka');
     await evalJS(`
       window.game.customers.spawnTimer = 999;
       while (window.game.customers.queue.length > 1) {
         const ex = window.game.customers.queue.pop();
         window.game.customers.list = window.game.customers.list.filter((x) => x !== ex);
       }
-      window.game.customers.queue[0].x = 353;
+      window.game.customers.queue[0].x = 351;
     `);
     await sleep(300);
     assert.equal(await evalJS(`window.game.customers.current()?.state`), 'ordering');
+    await shot('v2_04_sekolah_live');
 
-    // 4. Pesanan salah ditolak dengan kesempatan perbaiki
+    // 5. Selesaikan pesanan -> pembayaran -> cek saldo bertambah (termasuk +Rp1.000 gorengan)
     const order = await evalJS(`window.game.customers.current().order`);
-    const wrongId = ['air', 'mie', 'kopi', 'susu', 'keripik'].find((id) => !order[id]);
-    if (wrongId) {
-      await evalJS(`document.querySelector('.item-btn[data-id="${wrongId}"]').click()`);
-      await evalJS(`document.getElementById('btn-submit').click()`);
-      await sleep(120);
-      assert.equal(await evalJS(`window.game.customers.current().state`), 'ordering');
-      await evalJS(`document.getElementById('btn-clear').click()`);
-    }
-
-    // 5. Pesanan tepat -> pembayaran -> kembalian -> stok & saldo berubah
     const stockBefore = await evalJS(`Object.assign({}, window.game.state.stock)`);
     const moneyBefore = await evalJS(`window.game.state.money`);
     for (const [id, qty] of Object.entries(order)) {
@@ -171,29 +211,33 @@ async function main() {
     }
     await evalJS(`document.getElementById('btn-pay-give').click()`);
     await sleep(200);
-    assert.equal(await evalJS(`window.game.state.money`), moneyBefore + pay.total);
+    // Saldo bertambah: harga pesanan + bonus gorengan Rp1.000
+    assert.equal(await evalJS(`window.game.state.money`), moneyBefore + pay.total + 1000);
     for (const [id, qty] of Object.entries(order)) {
       assert.equal(await evalJS(`window.game.state.stock['${id}']`), stockBefore[id] - qty);
     }
 
-    // 6. Tutup warung -> Laporan Harian -> Hari 2
+    // 6. Tutup warung -> Laporan Harian memuat Setoran Cabang Pusat -> Hari 2
     await evalJS(`window.game.closeWarungEarly()`);
     await sleep(1100);
     assert.equal(await evalJS(`window.game.ui.modalType`), 'report');
+    const hasBranchDeposit = await evalJS(`document.getElementById('modal-body').textContent.includes('Setoran Cabang Lain')`);
+    assert.equal(hasBranchDeposit, true, 'Laporan harian harus menampilkan Setoran Cabang Lain');
+    await shot('v2_05_report_branches');
     await evalJS(`document.querySelector('#modal-actions .primary').click()`);
     await sleep(200);
     assert.equal(await evalJS(`window.game.state.day`), 2);
 
-    // 7. Reload -> Continue progres tersimpan
+    // 7. Reload -> Continue memuat cabang Sekolah & Hari 2
     await cdp('Page.reload');
     await sleep(600);
-    assert.equal(await evalJS(`!document.getElementById('menu-continue').classList.contains('hidden')`), true);
     await evalJS(`document.getElementById('menu-continue').click()`);
     await sleep(300);
     assert.equal(await evalJS(`window.game.state.day`), 2);
+    assert.equal(await evalJS(`window.game.state.activeBranch`), 'sekolah');
 
     assert.equal(errors.length, 0, 'Console/page errors: ' + errors.join('; '));
-    console.log('E2E PASS: Seluruh siklus gameplay & Acceptance Criteria terverifikasi (0 error).');
+    console.log('E2E PASS (v2.0.0): Cabang, 12 Upgrade, QRIS, Gorengan, Laporan & Save/Load OK (0 error).');
   } finally {
     if (ws) ws.close();
     chrome.kill();

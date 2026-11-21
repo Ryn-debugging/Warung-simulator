@@ -1,12 +1,14 @@
 /* ==========================================================
  * CustomerManager.js — Kedatangan pelanggan, antrean, pesanan,
- * kesabaran, dan pergerakan. (PRD 5.1)
+ * kesabaran, dan pergerakan.
+ * v2.0.0: mendukung profil tiap cabang, 5 slot antrean (ekspansi),
+ * dan bonus kesabaran Wi-Fi / kipas angin global.
  * ========================================================== */
 (function (global) {
   'use strict';
   const D = global.DATA;
 
-  const SLOT_X = [352, 390, 424, 456];
+  const SLOT_X = [350, 384, 416, 446, 474];
   const FEET_Y = 212;
   const WALK_SPEED = 60;
   const QTY_WORDS = ['nol', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan'];
@@ -27,12 +29,18 @@
   class CustomerManager {
     constructor(game) {
       this.game = game;
-      this.list = [];   // semua pelanggan yang terlihat
-      this.queue = [];  // pelanggan antre (index 0 = di kasir)
+      this.list = [];
+      this.queue = [];
       this.spawnTimer = 2;
     }
 
     get state() { return this.game.state; }
+
+    branchDef() { return D.branchById(this.state.activeBranch); }
+
+    maxQueue() {
+      return this.state.upgrades && this.state.upgrades.ekspansi ? D.EXPANDED_MAX_QUEUE : D.MAX_QUEUE;
+    }
 
     reset() { this.list = []; this.queue = []; this.spawnTimer = 2; }
 
@@ -46,9 +54,14 @@
     // ---------- Pembuatan pelanggan ----------
     pickType() {
       const day = this.state.day;
+      const boost = this.branchDef().typeBoost || {};
       const entries = Object.keys(D.CUSTOMER_TYPES)
-        .map((id) => ({ id, w: D.CUSTOMER_TYPES[id].weight, t: D.CUSTOMER_TYPES[id] }))
-        .filter((e) => e.t.minDay <= day);
+        .map((id) => ({
+          id,
+          w: D.CUSTOMER_TYPES[id].weight * (boost[id] || 1),
+          t: D.CUSTOMER_TYPES[id],
+        }))
+        .filter((e) => e.t.minDay <= day || boost[e.id]);
       return weightedPick(entries).id;
     }
 
@@ -68,12 +81,19 @@
 
     makeOrder(typeId, big) {
       const t = D.CUSTOMER_TYPES[typeId];
-      let pool = D.ITEMS.map((it) => ({ id: it.id, w: t.prefs[it.id] || 0 })).filter((e) => e.w > 0);
-      const nDistinct = big ? randInt(3, 4) : randInt(t.distinct[0], t.distinct[1]);
+      const br = this.branchDef();
+      let pool = D.ITEMS.map((it) => {
+        let w = t.prefs[it.id] || 0;
+        if (br.id === 'kampus' && (it.id === 'mie' || it.id === 'kopi')) w *= 1.6;
+        if (br.id === 'sekolah' && (it.id === 'keripik' || it.id === 'susu')) w *= 1.5;
+        return { id: it.id, w };
+      }).filter((e) => e.w > 0);
+      const isBig = big || (br.bigOrderChance && Math.random() < br.bigOrderChance);
+      const nDistinct = isBig ? randInt(3, 4) : randInt(t.distinct[0], t.distinct[1]);
       const order = {};
       for (let i = 0; i < nDistinct && pool.length; i++) {
         const e = weightedPick(pool);
-        order[e.id] = big ? randInt(2, 4) : randInt(t.qty[0], t.qty[1]);
+        order[e.id] = isBig ? randInt(2, 4) : randInt(t.qty[0], t.qty[1]);
         pool = pool.filter((p) => p.id !== e.id);
       }
       return order;
@@ -92,9 +112,11 @@
       const typeId = forceBorong ? (D.CUSTOMER_TYPES.ibu ? 'ibu' : 'biasa') : this.pickType();
       const t = D.CUSTOMER_TYPES[typeId];
       const order = this.makeOrder(typeId, forceBorong);
-      const u = this.state.upgrades;
+      const u = this.state.upgrades || {};
+      const g = this.state.globalUpgrades || {};
       let patience = t.patience * (forceBorong ? 1.8 : 1);
       if (u.kursi) patience *= 1.1;
+      if (g.wifi) patience *= 1.1;
       const c = {
         id: nextId++,
         type: typeId,
@@ -111,7 +133,7 @@
         line: '',
         patience, maxPatience: patience,
         mistakes: 0, changeTries: 0,
-        cash: 0, total: 0, changeGiven: 0,
+        cash: 0, isQris: false, total: 0, changeGiven: 0,
         walkT: 0, moving: true, bob: Math.random() * 6,
         emote: null, emoteT: 0,
         chatterT: rand(6, 9), saidImpatient: false,
@@ -123,19 +145,20 @@
         : pick(t.lines).replace('{order}', c.orderText);
       this.queue.push(c);
       this.list.push(c);
-      c.targetX = SLOT_X[this.queue.length - 1];
+      c.targetX = SLOT_X[Math.min(SLOT_X.length - 1, this.queue.length - 1)];
       return c;
     }
 
     nextInterval() {
       const s = this.state;
+      const br = this.branchDef();
       const h = s.clockMin / 60;
-      let base = 10;
+      let base = 10 * (br.spawnMul || 1);
       base *= 1.4 - (s.reputation / 100) * 0.8;
       if ((h >= 8 && h < 9.5) || (h >= 12 && h < 13.5) || (h >= 16 && h < 18)) base *= 0.7;
-      else if (h >= 19) base *= 1.3;
+      else if (h >= 19) base *= br.id === 'kampus' ? 0.85 : 1.3;
       if (s.event.id === 'hujan') base *= 1.6;
-      if (s.upgrades.papan) base *= 0.85;
+      if (s.upgrades && s.upgrades.papan) base *= 0.85;
       base *= Math.max(0.75, 1 - (s.day - 1) * 0.03);
       return base * rand(0.6, 1.4);
     }
@@ -149,7 +172,7 @@
       if (i >= 0) this.queue.splice(i, 1);
       c.targetX = -this.extra() - 30;
       c.y = FEET_Y + 6;
-      this.queue.forEach((q, idx) => { q.targetX = SLOT_X[idx]; });
+      this.queue.forEach((q, idx) => { q.targetX = SLOT_X[Math.min(SLOT_X.length - 1, idx)]; });
     }
 
     emote(c, symbol, dur) { c.emote = symbol; c.emoteT = dur || 2.2; }
@@ -162,7 +185,7 @@
       if (s.phase === 'open') {
         this.spawnTimer -= dt;
         if (this.spawnTimer <= 0) {
-          if (this.queue.length < D.MAX_QUEUE) {
+          if (this.queue.length < this.maxQueue()) {
             const borong = s.event.id === 'borong' && !s.event.borongDone && progress > 0.25;
             if (borong) s.event.borongDone = true;
             this.spawn(borong);
@@ -172,9 +195,12 @@
         }
       }
 
+      const u = s.upgrades || {};
+      const g = s.globalUpgrades || {};
       let drainMul = 1;
-      if (s.upgrades.kursi) drainMul *= 0.8;
-      if (s.upgrades.lampu) drainMul *= 0.9;
+      if (u.kursi) drainMul *= 0.8;
+      if (u.lampu) drainMul *= 0.9;
+      if (g.wifi) drainMul *= 0.8;
 
       for (let i = this.list.length - 1; i >= 0; i--) {
         const c = this.list[i];
@@ -218,7 +244,6 @@
             this.game.onPatienceOut(c);
             continue;
           }
-          // Pelanggan cerewet banyak bertanya
           if (c.state === 'ordering' && D.CUSTOMER_TYPES[c.type].chatty) {
             c.chatterT -= dt;
             if (c.chatterT <= 0) {
@@ -231,7 +256,6 @@
       }
     }
 
-    /** Hit test dalam koordinat inti (core) dunia. */
     hitTest(x, y) {
       for (let i = this.list.length - 1; i >= 0; i--) {
         const c = this.list[i];

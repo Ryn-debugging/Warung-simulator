@@ -1,6 +1,7 @@
 /* ==========================================================
  * InventoryManager.js — Stok, kapasitas, harga beli/jual.
- * Bekerja langsung pada objek `state` (data yang disimpan).
+ * v2.0.0: mendukung ekspansi ruang, bonus harga cabang, dan
+ * diskon permanen Kontrak Gudang Grosir.
  * ========================================================== */
 (function (global) {
   'use strict';
@@ -13,8 +14,18 @@
 
     get items() { return D.ITEMS; }
 
+    activeBranchDef() {
+      return D.branchById(this.state.activeBranch);
+    }
+
+    activeUpgrades() {
+      const b = this.state.branches && this.state.branches[this.state.activeBranch];
+      return (b && b.upgrades) || this.state.upgrades || {};
+    }
+
     capacity() {
-      return D.START.baseCapacity + (this.state.upgrades.rak ? 15 : 0);
+      const u = this.activeUpgrades();
+      return D.START.baseCapacity + (u.rak ? 15 : 0) + (u.ekspansi ? 10 : 0);
     }
 
     stock(id) { return this.state.stock[id] || 0; }
@@ -27,23 +38,29 @@
       return D.ITEMS.reduce((sum, it) => sum + this.stock(it.id), 0);
     }
 
-    /** Harga jual (minuman dingin lebih mahal bila punya kulkas). */
+    /** Harga jual (kulkas minuman dingin + bonus harga lokasi cabang). */
     sellPrice(id) {
       const it = D.itemById(id);
       if (!it) return 0;
-      const cold = this.state.upgrades.kulkas && it.cat === 'Minuman' ? D.COLD_BONUS : 0;
-      return it.sell + cold;
+      const u = this.activeUpgrades();
+      const br = this.activeBranchDef();
+      const cold = u.kulkas && it.cat === 'Minuman' ? D.COLD_BONUS : 0;
+      return it.sell + cold + (br.priceBonus || 0);
     }
 
-    /** Harga beli dari supplier (dipengaruhi event diskon). */
+    /** Harga beli supplier (diskon grosir 15% + event diskon harian 30%). */
     buyPrice(id) {
       const it = D.itemById(id);
       if (!it) return 0;
+      let price = it.buy;
+      if (this.state.globalUpgrades && this.state.globalUpgrades.grosir) {
+        price *= 0.85;
+      }
       const ev = this.state.event;
       if (ev && ev.id === 'diskon' && ev.itemId === id) {
-        return Math.round((it.buy * 0.7) / 100) * 100;
+        price *= 0.7;
       }
-      return it.buy;
+      return Math.max(500, Math.round(price / 100) * 100);
     }
 
     /** Menambah stok + memperbarui harga pokok rata-rata. */

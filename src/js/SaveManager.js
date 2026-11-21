@@ -1,6 +1,6 @@
 /* ==========================================================
- * SaveManager.js — Simpan & muat progres (LocalStorage). PRD 10.
- * Termasuk validasi data simpan yang tidak valid.
+ * SaveManager.js — Simpan & muat progres (LocalStorage).
+ * v2.0.0 mendukung multi-cabang & migrasi otomatis dari v1.
  * ========================================================== */
 (function (global) {
   'use strict';
@@ -8,7 +8,7 @@
 
   const SAVE_KEY = 'warungsim_save_v1';
   const SETTINGS_KEY = 'warungsim_settings_v1';
-  const VERSION = 1;
+  const VERSION = 2;
   const DEFAULT_SETTINGS = { music: 0.5, sfx: 0.8, easyChange: true, daySpeed: 1 };
 
   function storage() {
@@ -18,16 +18,38 @@
 
   function isNum(v) { return typeof v === 'number' && isFinite(v); }
 
+  function emptyBranchUpgrades() {
+    const u = {};
+    D.UPGRADES.forEach((up) => { u[up.id] = false; });
+    return u;
+  }
+
+  function emptyGlobalUpgrades() {
+    const u = {};
+    D.GLOBAL_UPGRADES.forEach((up) => { u[up.id] = false; });
+    return u;
+  }
+
+  function defaultBranches() {
+    const branches = {};
+    D.BRANCHES.forEach((b) => {
+      branches[b.id] = {
+        unlocked: b.id === 'pusat',
+        upgrades: emptyBranchUpgrades(),
+      };
+    });
+    return branches;
+  }
+
   const SaveManager = {
     VERSION, SAVE_KEY, SETTINGS_KEY,
-    _storage: null, // dapat diganti (mis. untuk pengujian)
+    _storage: null,
 
     createNewState() {
       const stock = {};
       const avgCost = {};
       D.ITEMS.forEach((it) => { stock[it.id] = D.START.stock[it.id] || 0; avgCost[it.id] = it.buy; });
-      const upgrades = {};
-      D.UPGRADES.forEach((u) => { upgrades[u.id] = false; });
+      const branches = defaultBranches();
       return {
         version: VERSION,
         day: 1,
@@ -35,18 +57,45 @@
         reputation: D.START.reputation,
         phase: 'prep',
         clockMin: D.DAY.openHour * 60,
-        stock, avgCost, upgrades,
+        activeBranch: 'pusat',
+        branches,
+        globalUpgrades: emptyGlobalUpgrades(),
+        // Referensi praktis yang selalu sinkron ke upgrade cabang aktif
+        upgrades: branches.pusat.upgrades,
+        stock, avgCost,
         event: { id: 'normal', itemId: null, borongDone: false },
         today: null,
-        stats: { totalRevenue: 0, totalServed: 0, totalAngry: 0, daysPlayed: 0, bestDayRevenue: 0 },
+        stats: { totalRevenue: 0, totalServed: 0, totalAngry: 0, daysPlayed: 0, bestDayRevenue: 0, branchIncomeTotal: 0 },
         savedAt: Date.now(),
       };
     },
 
-    /** Validasi + perbaiki ringan. Mengembalikan { ok, state, error }. */
+    /** Pastikan `state.upgrades` selalu menunjuk ke objek upgrade cabang aktif. */
+    syncActiveUpgrades(state) {
+      if (!state.branches || !state.branches[state.activeBranch]) {
+        state.activeBranch = 'pusat';
+      }
+      state.upgrades = state.branches[state.activeBranch].upgrades;
+      return state;
+    },
+
+    branchUpgrades(state, branchId) {
+      const id = branchId || state.activeBranch || 'pusat';
+      if (state.branches && state.branches[id]) return state.branches[id].upgrades;
+      return state.upgrades || emptyBranchUpgrades();
+    },
+
+    unlockedBranchIds(state) {
+      if (!state || !state.branches) return ['pusat'];
+      return D.BRANCHES.map((b) => b.id).filter((id) => state.branches[id] && state.branches[id].unlocked);
+    },
+
+    /** Validasi + migrasi otomatis v1 -> v2. Mengembalikan { ok, state, error }. */
     validate(obj) {
       if (!obj || typeof obj !== 'object') return { ok: false, error: 'Data kosong' };
-      if (obj.version !== VERSION) return { ok: false, error: 'Versi data tidak dikenali' };
+      if (obj.version !== 1 && obj.version !== VERSION) {
+        return { ok: false, error: 'Versi data tidak dikenali' };
+      }
       if (!isNum(obj.money) || !isNum(obj.day) || obj.day < 1 || !isNum(obj.reputation)) {
         return { ok: false, error: 'Data keuangan/hari rusak' };
       }
@@ -55,15 +104,38 @@
         const v = obj.stock[it.id];
         if (!isNum(v) || v < 0) return { ok: false, error: 'Stok ' + it.name + ' tidak valid' };
       }
-      // Lengkapi field opsional dengan nilai default.
+
       const base = SaveManager.createNewState();
-      const s = Object.assign({}, base, obj);
+      const s = Object.assign({}, base, obj, { version: VERSION });
       s.day = Math.floor(s.day);
       s.reputation = Math.max(0, Math.min(100, s.reputation));
       s.avgCost = Object.assign({}, base.avgCost, obj.avgCost || {});
-      s.upgrades = Object.assign({}, base.upgrades, obj.upgrades || {});
       s.stats = Object.assign({}, base.stats, obj.stats || {});
       s.event = Object.assign({}, base.event, obj.event || {});
+      s.globalUpgrades = Object.assign({}, emptyGlobalUpgrades(), obj.globalUpgrades || {});
+
+      // Bangun struktur cabang (migrasi mulus dari v1 ke v2)
+      const branches = defaultBranches();
+      if (obj.version === 1) {
+        branches.pusat.upgrades = Object.assign(emptyBranchUpgrades(), obj.upgrades || {});
+        s.activeBranch = 'pusat';
+      } else if (obj.branches && typeof obj.branches === 'object') {
+        D.BRANCHES.forEach((b) => {
+          const src = obj.branches[b.id];
+          if (src && typeof src === 'object') {
+            branches[b.id] = {
+              unlocked: b.id === 'pusat' ? true : !!src.unlocked,
+              upgrades: Object.assign(emptyBranchUpgrades(), src.upgrades || {}),
+            };
+          }
+        });
+      }
+      s.branches = branches;
+      if (!s.branches[s.activeBranch] || !s.branches[s.activeBranch].unlocked) {
+        s.activeBranch = 'pusat';
+      }
+      SaveManager.syncActiveUpgrades(s);
+
       if (['prep', 'open', 'closing'].indexOf(s.phase) === -1) s.phase = 'prep';
       if (!isNum(s.clockMin)) s.clockMin = D.DAY.openHour * 60;
       return { ok: true, state: s };
@@ -73,7 +145,8 @@
       const st = storage();
       if (!st || !state) return false;
       try {
-        const copy = Object.assign({}, state, { savedAt: Date.now() });
+        SaveManager.syncActiveUpgrades(state);
+        const copy = Object.assign({}, state, { version: VERSION, savedAt: Date.now() });
         st.setItem(SAVE_KEY, JSON.stringify(copy));
         return true;
       } catch (e) {

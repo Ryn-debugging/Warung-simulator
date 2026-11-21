@@ -54,6 +54,9 @@
   .modal-title { padding: 7px 12px; font-size: 14px; }
   .modal-body { padding: 8px 12px; }
   .modal-actions { padding: 7px 12px; }
+  .prep-mini-row .btn { font-size: 10px; min-height: 32px; padding: 3px 2px; }
+  .tab-btn { font-size: 11px; padding: 5px 6px; }
+  .br-row { padding: 5px 8px; }
 }
 
 /* Layar agak sempit di landscape (mis. 560px - 700px lebar) */

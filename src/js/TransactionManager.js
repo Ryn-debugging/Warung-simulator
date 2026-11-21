@@ -78,6 +78,13 @@
       return { ok: true, total, cogs };
     }
 
+    /** Uang yang diberikan pelanggan (termasuk opsi QRIS uang pas otomatis). */
+    static makePayment(total, rng, typeId, hasQris) {
+      const r = rng || Math.random;
+      if (hasQris && r() < 0.35) return { cash: total, isQris: true };
+      return { cash: TransactionManager.makeCustomerCash(total, r, typeId), isQris: false };
+    }
+
     /** Uang yang diberikan pelanggan untuk total tertentu. */
     static makeCustomerCash(total, rng, typeId) {
       const r = rng || Math.random;

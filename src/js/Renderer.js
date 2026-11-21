@@ -153,10 +153,11 @@
       b.imageSmoothingEnabled = false;
       const hour = s.clockMin / 60;
       const rain = s.event && s.event.id === 'hujan' && (s.phase === 'open' || s.phase === 'closing');
+      const br = D.branchById(s.activeBranch);
 
       this.drawSky(hour, rain);
-      this.drawBackground(hour);
-      this.drawWarung(s);
+      this.drawBackground(hour, br);
+      this.drawWarung(s, br);
       this.drawStreet(s);
 
       // Pelanggan (urut berdasarkan y)
@@ -206,29 +207,100 @@
       }
     }
 
-    drawBackground(hour) {
-      const walls = ['#e7c8a0', '#c9d8b6', '#f0d9a8', '#b8cfd8', '#e3b5a4', '#d6c6e1'];
-      const roofs = ['#9c4a2f', '#7d3f2a', '#a85d3c', '#5f6b73'];
+    drawBackground(hour, br) {
+      const theme = (br && br.theme) || 'pusat';
       const night = hour > 18.5;
+      const winCol = night ? '#ffd27a' : '#5a7d95';
       const startX = -this.extra - 64;
-      for (let i = 0; startX + i * 66 < 480 + this.extra + 66; i++) {
-        const x = startX + i * 66;
-        const hgt = 60 + Math.floor(hash(i + 1) * 40);
-        const top = 196 - hgt;
-        const wall = walls[Math.floor(hash(i + 7) * walls.length)];
-        const roof = roofs[Math.floor(hash(i + 11) * roofs.length)];
-        this.r(x, top, 60, hgt, wall);
-        for (let k = 0; k < 8; k++) this.r(x - 4 + k, top - 8 + k, 68 - k * 2, 1, roof);
-        this.r(x - 4, top - 1, 68, 2, Sprites.shade(roof, -0.3));
-        const winCol = night ? '#ffd27a' : '#5a7d95';
-        this.r(x + 10, top + 16, 12, 12, '#5b4030'); this.r(x + 11, top + 17, 10, 10, winCol);
-        this.r(x + 38, top + 16, 12, 12, '#5b4030'); this.r(x + 39, top + 17, 10, 10, winCol);
-        this.r(x + 24, 196 - 30, 12, 30, '#6b4a33');
+
+      if (theme === 'sekolah') {
+        // Gedung sekolah dasar (SDN 01) + pagar sekolah + bendera Merah Putih
+        for (let x = startX; x < 480 + this.extra + 90; x += 92) {
+          this.r(x, 108, 86, 88, '#f5ebd6');
+          this.r(x, 152, 86, 44, '#e5d4b3');
+          for (let k = 0; k < 10; k++) this.r(x - 4 + k, 98 + k, 94 - k * 2, 1, '#b8422b');
+          this.r(x - 4, 107, 94, 2, '#7d2a1b');
+          // Jendela kelas berjejer
+          for (let w = 0; w < 3; w++) {
+            this.r(x + 8 + w * 26, 120, 18, 20, '#5a3a22');
+            this.r(x + 10 + w * 26, 122, 14, 16, winCol);
+          }
+          // Pagar besi sekolah hijau
+          this.r(x - 4, 174, 92, 3, '#2e7d32');
+          this.r(x - 4, 186, 92, 10, '#d7cfc0');
+          for (let fx = x; fx < x + 88; fx += 8) this.r(fx, 166, 2, 20, '#2e7d32');
+        }
+        // Tiang bendera + Bendera Merah Putih berkibar di sisi kanan
+        const fx = 466;
+        this.r(fx, 44, 2, 152, '#d8dde3');
+        this.r(fx - 2, 190, 6, 6, '#9ea5ad');
+        const wave = Math.sin(this.time * 5) > 0 ? 1 : 0;
+        this.r(fx + 2, 46, 14, 5, '#d92626');
+        this.r(fx + 16, 46 + wave, 10, 5, '#c21f1f');
+        this.r(fx + 2, 51, 14, 5, '#ffffff');
+        this.r(fx + 16, 51 + wave, 10, 5, '#ececec');
+        this.drawShadeTree(-16, 118);
+      } else if (theme === 'kampus') {
+        // Ruko & rumah kos 2 lantai mahasiswa
+        const walls = ['#d9e4ec', '#efe3cf', '#d4e2d4', '#e8d5d5'];
+        for (let i = 0; startX + i * 76 < 480 + this.extra + 76; i++) {
+          const x = startX + i * 76;
+          const hgt = 110 + (i % 2) * 18;
+          const top = 196 - hgt;
+          const wall = walls[i % walls.length];
+          this.r(x, top, 70, hgt, wall);
+          this.r(x - 2, top - 4, 74, 5, '#4a5568');
+          // Lantai 2 + balkon kos
+          this.r(x + 6, top + 12, 16, 18, '#3b4a5e'); this.r(x + 8, top + 14, 12, 14, winCol);
+          this.r(x + 44, top + 12, 16, 18, '#3b4a5e'); this.r(x + 46, top + 14, 12, 14, winCol);
+          this.r(x + 2, top + 36, 66, 3, '#718096');
+          for (let rx = x + 4; rx < x + 66; rx += 6) this.r(rx, top + 28, 1, 8, '#718096');
+          // Lantai 1
+          this.r(x + 10, 152, 18, 16, '#4a3b2a'); this.r(x + 12, 154, 14, 12, winCol);
+          this.r(x + 42, 160, 16, 36, '#6b4a33');
+        }
+        this.drawShadeTree(466, 114);
+        this.drawShadeTree(-24, 120);
+      } else if (theme === 'pasar') {
+        // Kios pasar tradisional dengan terpal warna-warni
+        const tarps = ['#d97706', '#2563eb', '#dc2626', '#16a34a'];
+        for (let i = 0; startX + i * 68 < 480 + this.extra + 68; i++) {
+          const x = startX + i * 68;
+          const top = 112 + (i % 2) * 12;
+          this.r(x, top, 62, 196 - top, '#e3d2b4');
+          // Atap seng & terpal pasar
+          this.r(x - 3, top - 6, 68, 7, '#64748b');
+          const tc = tarps[i % tarps.length];
+          this.r(x - 4, top + 1, 70, 10, tc);
+          this.r(x - 4, top + 11, 70, 2, Sprites.shade(tc, -0.25));
+          // Meja dagangan pasar + peti sayur/buah
+          this.r(x + 6, 166, 50, 30, '#8b5a2b');
+          this.r(x + 8, 156, 14, 10, '#4caf50');
+          this.r(x + 24, 156, 14, 10, '#f59e0b');
+          this.r(x + 40, 156, 14, 10, '#ef4444');
+        }
+      } else {
+        // Tema Pusat — rumah warga perumahan + pohon pisang
+        const walls = ['#e7c8a0', '#c9d8b6', '#f0d9a8', '#b8cfd8', '#e3b5a4', '#d6c6e1'];
+        const roofs = ['#9c4a2f', '#7d3f2a', '#a85d3c', '#5f6b73'];
+        for (let i = 0; startX + i * 66 < 480 + this.extra + 66; i++) {
+          const x = startX + i * 66;
+          const hgt = 60 + Math.floor(hash(i + 1) * 40);
+          const top = 196 - hgt;
+          const wall = walls[Math.floor(hash(i + 7) * walls.length)];
+          const roof = roofs[Math.floor(hash(i + 11) * roofs.length)];
+          this.r(x, top, 60, hgt, wall);
+          for (let k = 0; k < 8; k++) this.r(x - 4 + k, top - 8 + k, 68 - k * 2, 1, roof);
+          this.r(x - 4, top - 1, 68, 2, Sprites.shade(roof, -0.3));
+          this.r(x + 10, top + 16, 12, 12, '#5b4030'); this.r(x + 11, top + 17, 10, 10, winCol);
+          this.r(x + 38, top + 16, 12, 12, '#5b4030'); this.r(x + 39, top + 17, 10, 10, winCol);
+          this.r(x + 24, 196 - 30, 12, 30, '#6b4a33');
+        }
+        this.drawBanana(458, 120);
+        this.drawBanana(-30, 130);
       }
-      // pohon pisang di sisi kanan & kiri
-      this.drawBanana(458, 120);
-      this.drawBanana(-30, 130);
-      // tiang listrik
+
+      // Tiang listrik + kabel
       this.r(12, 18, 4, 199, '#6d6d6d');
       this.r(2, 24, 24, 3, '#555555');
       for (let x = -this.extra; x < 480 + this.extra; x++) {
@@ -247,9 +319,18 @@
       this.r(x + 2, y - 14, 12, 4, '#5fb04a'); this.r(x + 6, y - 18, 6, 4, '#5fb04a');
     }
 
-    drawWarung(s) {
+    drawShadeTree(x, y) {
+      this.r(x + 10, y + 18, 6, 196 - (y + 18), '#6b4a2b');
+      this.r(x - 6, y, 38, 18, '#3d8b40');
+      this.r(x, y - 10, 26, 12, '#4ea352');
+      this.r(x - 2, y + 12, 30, 8, '#2f7032');
+    }
+
+    drawWarung(s, br) {
       const stock = s.stock;
-      const u = s.upgrades;
+      const u = s.upgrades || {};
+      const g = s.globalUpgrades || {};
+      const branch = br || D.branchById(s.activeBranch);
       this.hitRegions = [];
       // Dinding dalam
       this.r(40, 46, 400, 150, '#e8d6a0');
@@ -259,6 +340,22 @@
       // Kalender & jam dinding
       this.r(160, 72, 22, 26, '#ffffff'); this.r(160, 72, 22, 6, '#d9342b'); this.r(164, 82, 14, 1, '#999'); this.r(164, 86, 14, 1, '#999'); this.r(164, 90, 10, 1, '#999');
       this.r(300, 76, 14, 14, '#5a3a22'); this.r(302, 78, 10, 10, '#ffffff'); this.r(306, 80, 1, 4, '#222'); this.r(307, 83, 3, 1, '#222');
+
+      // ---- Kipas angin dinding berputar (Upgrade Global: Wi-Fi & Kipas) ----
+      if (g.wifi) {
+        const fx = 276, fy = 112;
+        this.r(fx - 7, fy - 7, 14, 14, '#7d8a96');
+        this.r(fx - 6, fy - 6, 12, 12, '#cfd8df');
+        const spin = Math.floor(this.time * 12) % 2;
+        if (spin === 0) {
+          this.r(fx - 5, fy - 1, 10, 2, '#2d6fa3');
+          this.r(fx - 1, fy - 5, 2, 10, '#2d6fa3');
+        } else {
+          this.r(fx - 4, fy - 4, 3, 3, '#2d6fa3'); this.r(fx + 1, fy + 1, 3, 3, '#2d6fa3');
+          this.r(fx + 1, fy - 4, 3, 3, '#2d6fa3'); this.r(fx - 4, fy + 1, 3, 3, '#2d6fa3');
+        }
+        this.r(fx - 1, fy - 1, 2, 2, '#24170f');
+      }
 
       // ---- Rak kiri ----
       this.r(50, 70, 100, 126, '#a8743f');
@@ -386,6 +483,32 @@
         this.r(x - 1, 147, 14, 4, '#c0392b');
       }
 
+      // ---- Upgrade: Stand QRIS di meja kasir ----
+      if (g.qris) {
+        this.r(302, 152, 11, 14, '#ffffff');
+        this.r(302, 152, 11, 3, '#c8372d');
+        this.r(304, 157, 3, 3, '#1a1a1a'); this.r(308, 157, 3, 3, '#1a1a1a');
+        this.r(304, 161, 3, 3, '#1a1a1a'); this.r(309, 162, 2, 2, '#1a1a1a');
+        this.r(301, 165, 13, 2, '#3b4a5e');
+      }
+
+      // ---- Upgrade: Etalase Gorengan & Termos Air Panas ----
+      if (u.gorengan) {
+        // kotak kaca gorengan hangat
+        this.r(334, 151, 30, 15, '#d8eef5');
+        this.r(334, 151, 30, 2, '#8b5a2b');
+        this.r(334, 164, 30, 2, '#8b5a2b');
+        this.r(336, 158, 7, 5, '#d97706');
+        this.r(344, 157, 8, 6, '#e8a33a');
+        this.r(354, 158, 7, 5, '#c96f16');
+        this.r(336, 153, 2, 10, '#ffffff');
+        // termos air panas merah-perak
+        this.r(367, 148, 10, 18, '#c8372d');
+        this.r(368, 145, 8, 3, '#e2e8f0');
+        this.r(369, 151, 2, 12, '#ef7b73');
+        this.r(367, 163, 10, 3, '#475569');
+      }
+
       // Highlight rak yang baru disentuh
       if (this.flashT > 0 && this.flashItem) {
         const hr = this.hitRegions.find((h) => h.id === this.flashItem);
@@ -405,7 +528,6 @@
         }
         this.r(40, 60 + sh - 4, 400, 4, '#3b4a45');
         if (this.shutterPos > 0.65) {
-          // papan kecil "TUTUP"
           this.r(214, 114, 52, 22, '#24170f');
           this.r(216, 116, 48, 18, '#c8372d');
           this.labels.push({ text: 'TUTUP', x: 240, y: 125, color: '#fff6d6' });
@@ -422,15 +544,32 @@
       this.r(24, 96, 10, 3, '#ffffff');
       this.r(24, 102, 10, 3, '#ffe066');
       this.r(24, 108, 10, 3, '#ffffff');
+      // stiker FREE WIFI di tiang kanan (Upgrade Global)
+      if (g.wifi) {
+        this.r(438, 76, 18, 16, '#1d4ed8');
+        this.r(439, 77, 16, 14, '#2563eb');
+        this.labels.push({ text: 'WIFI', x: 447, y: 84, small: true, color: '#ffffff' });
+      }
 
-      // ---- Terpal / awning bergaris ----
-      for (let x = 30, i = 0; x < 450; x += 10, i++) {
-        const col = i % 2 ? '#f0efe6' : '#2e8b57';
+      // ---- Terpal / awning bergaris (warna sesuai cabang, lebih lebar jika Ekspansi) ----
+      const awStart = u.ekspansi ? 16 : 30;
+      const awEnd = u.ekspansi ? 466 : 450;
+      const awCols = branch.awning || ['#2e8b57', '#f0efe6'];
+      for (let x = awStart, i = 0; x < awEnd; x += 10, i++) {
+        const col = i % 2 ? awCols[1] : awCols[0];
         this.r(x, 46, 10, 12, col);
         this.r(x + 1, 58, 8, 2, col);
         this.r(x + 3, 60, 4, 1, col);
       }
-      this.r(30, 46, 420, 1, '#1d5e3a');
+      this.r(awStart, 46, awEnd - awStart, 1, Sprites.shade(awCols[0], -0.3));
+      // Bendera hias meriah jika Ekspansi Ruangan
+      if (u.ekspansi) {
+        const penCols = ['#f2c12e', '#d9342b', '#2e8b57', '#3a7bd5', '#e86fa0'];
+        for (let x = 36, i = 0; x < 444; x += 18, i++) {
+          this.r(x, 60, 8, 3, penCols[i % penCols.length]);
+          this.r(x + 2, 63, 4, 2, penCols[i % penCols.length]);
+        }
+      }
 
       // ---- Atap genteng ----
       for (let y = 30; y < 46; y++) {
@@ -440,11 +579,11 @@
       for (let x = 32; x < 448; x += 8) this.r(x + ((x / 8) % 2) * 4, 32, 1, 12, '#9a4527');
       this.r(26, 44, 428, 3, '#6b3a22');
 
-      // ---- Papan nama ----
+      // ---- Papan nama (sesuai cabang + neon jika upgrade papan) ----
       const papan = u.papan;
       this.r(170, 24, 3, 8, '#4a3020'); this.r(307, 24, 3, 8, '#4a3020');
       this.r(148, 3, 184, 26, papan ? '#d4a017' : '#2b1d14');
-      this.r(150, 5, 180, 22, papan ? '#b8262b' : '#1f6f8b');
+      this.r(150, 5, 180, 22, papan ? '#b8262b' : (branch.signBg || '#1f6f8b'));
       if (papan) {
         for (let x = 152; x < 330; x += 8) {
           const on = Math.floor(this.time * 3 + x / 8) % 2 === 0;
@@ -592,19 +731,20 @@
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
-      // Papan nama
+      // Papan nama (dinamis sesuai cabang)
+      const br = D.branchById(s.activeBranch);
       ctx.font = 'bold 13px "Trebuchet MS", Verdana, sans-serif';
       ctx.fillStyle = '#1a1206';
-      ctx.fillText('WARUNG BERKAH', 240.6, 13.6);
-      ctx.fillStyle = s.upgrades.papan ? '#ffe9a0' : '#ffe066';
-      ctx.fillText('WARUNG BERKAH', 240, 13);
+      ctx.fillText(br.signTitle, 240.6, 13.6);
+      ctx.fillStyle = s.upgrades && s.upgrades.papan ? '#ffe9a0' : '#ffe066';
+      ctx.fillText(br.signTitle, 240, 13);
       ctx.font = 'bold 6px Verdana, sans-serif';
       ctx.fillStyle = '#ffffff';
-      ctx.fillText('Sembako • Jajanan • Kopi', 240, 23);
+      ctx.fillText(br.signSub, 240, 23);
       // Spanduk meja (hanya terlihat saat pintu tidak menutupi)
       if (this.shutterPos < 0.72) {
         ctx.fillStyle = '#b8262b';
-        if (s.upgrades.kasir) {
+        if (s.upgrades && s.upgrades.kasir) {
           ctx.font = 'bold 7px Verdana, sans-serif';
           ctx.fillText('KASIR', 402, 182);
         } else {

@@ -951,3 +951,128 @@ html, body {
   font-size: 16px;
 }
 #rotate-hint > div { font-size: 48px; }
+
+/* ---------- Fitur v2.0.0: Cabang & 12 Upgrade ---------- */
+.branch-chip {
+  cursor: pointer;
+  font-family: inherit;
+  border-color: #f2c12e;
+  color: #ffe9a0;
+  transition: transform 0.06s ease;
+}
+.branch-chip:active { transform: translateY(1px); }
+
+.ver-pill {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  background: var(--green);
+  color: #ffffff;
+  border: 1.5px solid var(--ink);
+  border-radius: 99px;
+  padding: 1px 6px;
+  margin-left: 4px;
+}
+
+.muted-inline {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: none;
+}
+
+.prep-mini-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+.prep-mini-row .btn {
+  padding: 4px 4px;
+  font-size: 11px;
+  min-height: 36px;
+}
+
+.banner-info {
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: #e3f0fb;
+  border: 1.5px solid var(--blue);
+  color: #1a4b73;
+}
+
+.tab-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.tab-btn {
+  padding: 7px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--wood-dark);
+  cursor: pointer;
+  box-shadow: 0 2px 0 var(--ink);
+}
+.tab-btn.active {
+  background: var(--wood);
+  color: var(--gold);
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+.br-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: #fffaf0;
+  border: 1.5px solid var(--wood-light);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.br-row.active {
+  background: #e4f6e9;
+  border-color: var(--green);
+  border-width: 2px;
+}
+.br-row.owned {
+  background: #fff8e2;
+  border-color: var(--gold-dark);
+}
+.br-row.locked { opacity: 0.92; }
+
+.br-swatch {
+  width: 12px;
+  align-self: stretch;
+  border-radius: 4px;
+  border: 1.5px solid var(--ink);
+  flex: 0 0 auto;
+}
+.br-info { flex: 1 1 auto; min-width: 0; }
+.br-name { font-weight: 900; font-size: 13px; display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
+.br-desc { font-size: 11.5px; color: var(--ink); margin-top: 1px; line-height: 1.25; }
+.br-meta { font-size: 11px; font-weight: 700; color: var(--muted); margin-top: 2px; }
+.br-act { flex: 0 0 auto; }
+
+.mini-pill {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: #ddf6e4;
+  border: 1px solid var(--green);
+  color: var(--green-dark);
+}
+
+.branch-rep {
+  background: #e8f7ec;
+  border-color: var(--green);
+}
+

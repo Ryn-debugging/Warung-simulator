@@ -1,6 +1,7 @@
 /* ==========================================================
  * GameManager.js — Pengendali utama loop game, fase harian,
- * transaksi, supplier, upgrade, pause, dan auto-save.
+ * transaksi, QRIS, supplier, 12 upgrade, buka cabang,
+ * pause, dan auto-save. (v2.0.0)
  * ========================================================== */
 (function (global) {
   'use strict';
@@ -49,7 +50,6 @@
         if (this.state) SaveManager.save(this.state);
       });
 
-      // Dukungan tombol Back Android (Capacitor / WebView)
       const onBack = () => {
         if (!this.state) {
           if (this.ui.modalType) this.ui.closeModal();
@@ -64,7 +64,6 @@
         global.Capacitor.Plugins.App.addListener('backButton', onBack);
       }
 
-      // Pintasan keyboard opsional untuk pengujian desktop (tidak wajib di Android)
       window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && this.state) onBack();
       });
@@ -91,6 +90,7 @@
 
     // ---------- Mulai / Lanjut / Menu ----------
     initManagers(state) {
+      SaveManager.syncActiveUpgrades(state);
       this.state = state;
       this.inventory = new InventoryManager(state);
       this.economy = new EconomyManager(state);
@@ -104,7 +104,7 @@
       if (SaveManager.hasSave()) {
         this.ui.openConfirm(
           'Mulai Permainan Baru?',
-          'Progres warung yang tersimpan saat ini akan diganti dengan warung baru dari Hari 1.',
+          'Progres warung dan seluruh cabang yang tersimpan akan diganti dengan warung baru dari Hari 1.',
           () => this.startNewGame()
         );
       } else {
@@ -140,7 +140,7 @@
       this.ui.showGame();
       if (state.phase === 'open') {
         this.customers.spawnTimer = 2;
-        this.ui.toast('Melanjutkan Hari ' + state.day + '!', 'ok');
+        this.ui.toast('Melanjutkan Hari ' + state.day + ' di ' + D.branchById(state.activeBranch).name + '!', 'ok');
       } else {
         this.checkSoftlockRescue();
         this.ui.toast('Selamat pagi, Hari ' + state.day + '!', 'ok');
@@ -154,7 +154,7 @@
       this.ui.showMenu();
     }
 
-    // ---------- Siklus Hari (PRD 4 & 6.1) ----------
+    // ---------- Siklus Hari ----------
     openWarung() {
       if (!this.state || this.state.phase !== 'prep') return;
       if (this.inventory.totalStock() <= 0) {
@@ -171,7 +171,8 @@
       this.audio.sfx('shutter');
       SaveManager.save(this.state);
       this.ui.renderAll();
-      this.ui.toast('Warung dibuka! Semangat melayani pelanggan!', 'ok');
+      const br = D.branchById(this.state.activeBranch);
+      this.ui.toast(br.name + ' dibuka! Semangat melayani pelanggan!', 'ok');
     }
 
     closeWarungEarly() {
@@ -201,7 +202,6 @@
       this.customers.reset();
       const report = this.economy.closeDay();
 
-      // Siapkan hari berikutnya langsung lalu simpan agar progres 100% aman.
       s.day += 1;
       s.phase = 'prep';
       s.clockMin = D.DAY.openHour * 60;
@@ -227,11 +227,10 @@
         if (ev.id === 'diskon' && ev.itemId) msg = msg.replace('{item}', D.itemById(ev.itemId).name);
         this.ui.toast(def.name + ': ' + msg, 'info');
       } else {
-        this.ui.toast('Hari ' + this.state.day + ' dimulai! Cek stok sebelum buka.', 'ok');
+        this.ui.toast('Hari ' + this.state.day + ' dimulai! Bisa pindah/buka cabang sebelum buka warung.', 'ok');
       }
     }
 
-    /** Mencegah softlock bila modal & stok habis total. */
     checkSoftlockRescue() {
       if (!this.state) return;
       const minCost = Math.min.apply(null, D.ITEMS.map((it) => this.inventory.buyPrice(it.id)));
@@ -243,7 +242,7 @@
       }
     }
 
-    // ---------- Interaksi Pelanggan & Transaksi (PRD 5.1 & 5.2) ----------
+    // ---------- Interaksi Pelanggan & Transaksi ----------
     say(c, text) {
       c.activeLine = text;
       if (this.customers && c === this.customers.current()) this.ui.renderServe();
@@ -264,7 +263,9 @@
           this.say(c, c.line);
           this.customers.emote(c, '💬', 1.6);
         } else if (c.state === 'paying') {
-          this.say(c, 'Total ' + D.formatRp(c.total) + ', ini uang saya ' + D.formatRp(c.cash) + ' ya Bang.');
+          this.say(c, c.isQris
+            ? 'Saya bayar lewat QRIS ya Bang, pas ' + D.formatRp(c.total) + '.'
+            : 'Total ' + D.formatRp(c.total) + ', ini uang saya ' + D.formatRp(c.cash) + ' ya Bang.');
         }
       } else {
         this.customers.emote(c, '💬', 1.6);
@@ -282,7 +283,7 @@
       }
       if (cur.state === 'paying') {
         this.audio.sfx('ui');
-        this.ui.toast('Pesanan sudah pas! Tinggal kasih kembalian.', 'info');
+        this.ui.toast('Pesanan sudah pas! Tinggal selesaikan pembayaran.', 'info');
         return;
       }
       const res = this.transactions.add(id);
@@ -342,19 +343,25 @@
         return;
       }
 
-      // Pesanan cocok -> masuk ke pembayaran
       cur.total = this.transactions.total(cur.order);
-      cur.cash = TransactionManager.makeCustomerCash(cur.total, Math.random, cur.type);
+      const hasQris = !!(this.state.globalUpgrades && this.state.globalUpgrades.qris);
+      const pay = TransactionManager.makePayment(cur.total, Math.random, cur.type, hasQris);
+      cur.cash = pay.cash;
+      cur.isQris = pay.isQris;
       cur.changeGiven = 0;
       cur.state = 'paying';
       this.audio.sfx('ui');
       const need = cur.cash - cur.total;
-      this.say(
-        cur,
-        need === 0
-          ? 'Pas ya Bang, total ' + D.formatRp(cur.total) + '. Ini uang pasnya!'
-          : 'Total ' + D.formatRp(cur.total) + ' ya. Ini uangnya ' + D.formatRp(cur.cash) + ', Bang.'
-      );
+      if (cur.isQris) {
+        this.say(cur, pick(D.LINES.qris).replace('{total}', D.formatRp(cur.total)));
+      } else {
+        this.say(
+          cur,
+          need === 0
+            ? 'Pas ya Bang, total ' + D.formatRp(cur.total) + '. Ini uang pasnya!'
+            : 'Total ' + D.formatRp(cur.total) + ' ya. Ini uangnya ' + D.formatRp(cur.cash) + ', Bang.'
+        );
+      }
       this.ui.renderServe();
     }
 
@@ -412,11 +419,16 @@
         }
       }
 
-      // Bonus tip Meja Kasir & Etalase (PRD 6.2)
-      let tip = 0;
+      let extraEarn = 0;
       if (this.state.upgrades.kasir && cur.mistakes === 0 && cur.changeTries === 0 && status === 'exact') {
-        tip = 500;
-        this.economy.earn(tip, 0);
+        extraEarn += 500;
+        this.economy.earn(500, 0);
+        this.renderer.addFloat('Tip +Rp500', 312, 134, '#ffe066');
+      }
+      if (this.state.upgrades.gorengan) {
+        extraEarn += D.GORENGAN_BONUS;
+        this.economy.earn(D.GORENGAN_BONUS, 0);
+        this.renderer.addFloat('+Rp1.000 Gorengan', 352, 132, '#ffb74d');
       }
 
       const fast = (cur.patience / cur.maxPatience) > 0.6 && cur.mistakes === 0;
@@ -429,8 +441,7 @@
       this.renderer.hop();
       this.setOwnerMood('happy', 1.4);
       this.customers.emote(cur, '😊', 2.4);
-      this.renderer.addFloat('+' + D.formatRp(sale.total + tip), 348, 150, '#7bf08b');
-      if (tip > 0) this.renderer.addFloat('Tip +' + D.formatRp(tip), 312, 134, '#ffe066');
+      this.renderer.addFloat('+' + D.formatRp(sale.total + extraEarn), 348, 150, '#7bf08b');
       this.say(cur, line);
       this.customers.leave(cur, 'happy');
 
@@ -476,7 +487,7 @@
       this.ui.renderAll();
     }
 
-    // ---------- Supplier & Upgrade ----------
+    // ---------- Supplier, Upgrade & Cabang Warung (v2.0.0) ----------
     buyStockBatch(qtyMap) {
       let totalCost = 0;
       let totalUnits = 0;
@@ -502,7 +513,24 @@
       return true;
     }
 
-    buyUpgrade(id) {
+    buyUpgrade(id, isGlobal) {
+      if (isGlobal) {
+        const u = D.GLOBAL_UPGRADES.find((x) => x.id === id);
+        if (!u || this.state.globalUpgrades[id]) return false;
+        if (!this.economy.spend(u.cost, 'upgrade')) {
+          this.audio.sfx('error');
+          this.ui.toast('Saldo belum cukup untuk ' + u.name + '.', 'err');
+          return false;
+        }
+        this.state.globalUpgrades[id] = true;
+        if (id === 'wifi') this.economy.changeReputation(4);
+        this.audio.sfx('success');
+        this.ui.toast('Upgrade jaringan "' + u.name + '" aktif di semua cabang!', 'ok');
+        SaveManager.save(this.state);
+        this.ui.renderAll();
+        return true;
+      }
+
       const u = D.UPGRADES.find((x) => x.id === id);
       if (!u || this.state.upgrades[id]) return false;
       if (!this.economy.spend(u.cost, 'upgrade')) {
@@ -510,10 +538,53 @@
         this.ui.toast('Saldo belum cukup untuk ' + u.name + '.', 'err');
         return false;
       }
-      this.state.upgrades[id] = true;
+      this.state.branches[this.state.activeBranch].upgrades[id] = true;
+      SaveManager.syncActiveUpgrades(this.state);
       if (id === 'papan') this.economy.changeReputation(5);
       this.audio.sfx('success');
-      this.ui.toast('Upgrade "' + u.name + '" berhasil dipasang!', 'ok');
+      const br = D.branchById(this.state.activeBranch);
+      this.ui.toast('Upgrade "' + u.name + '" dipasang di ' + br.shortName + '!', 'ok');
+      SaveManager.save(this.state);
+      this.ui.renderAll();
+      return true;
+    }
+
+    unlockBranch(branchId) {
+      const br = D.branchById(branchId);
+      const bData = this.state.branches[branchId];
+      if (!br || !bData || bData.unlocked) return false;
+      if (this.state.reputation < br.minRep) {
+        this.audio.sfx('error');
+        this.ui.toast('Butuh Reputasi minimal ' + br.minRep + ' untuk membuka ' + br.name + '.', 'err');
+        return false;
+      }
+      if (!this.economy.spend(br.cost, 'branch')) {
+        this.audio.sfx('error');
+        this.ui.toast('Saldo belum cukup untuk membuka ' + br.name + '.', 'err');
+        return false;
+      }
+      bData.unlocked = true;
+      this.economy.changeReputation(3);
+      this.audio.sfx('day');
+      this.ui.toast('Selamat! ' + br.name + ' resmi dibuka (+3 Rep)!', 'ok');
+      SaveManager.save(this.state);
+      this.ui.renderAll();
+      return true;
+    }
+
+    switchBranch(branchId) {
+      const bData = this.state.branches[branchId];
+      if (!bData || !bData.unlocked || this.state.activeBranch === branchId) return false;
+      if (this.state.phase !== 'prep') {
+        this.audio.sfx('error');
+        this.ui.toast('Pindah jaga cabang hanya bisa saat Persiapan Pagi (sebelum buka warung).', 'warn');
+        return false;
+      }
+      this.state.activeBranch = branchId;
+      SaveManager.syncActiveUpgrades(this.state);
+      this.audio.sfx('shutter');
+      const br = D.branchById(branchId);
+      this.ui.toast('Berpindah ke ' + br.name + '!', 'ok');
       SaveManager.save(this.state);
       this.ui.renderAll();
       return true;
